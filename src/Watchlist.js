@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import CoinModal from './CoinModal';
 
 function Watchlist() {
   const [input, setInput] = useState('');
@@ -6,6 +7,8 @@ function Watchlist() {
   const [marketData, setMarketData] = useState({});
   const [allCoins, setAllCoins] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [selectedCoinId, setSelectedCoinId] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetch('https://api.coingecko.com/api/v3/coins/list')
@@ -16,11 +19,8 @@ function Watchlist() {
 
   useEffect(() => {
     if (coins.length === 0) return;
-
     const ids = coins.join(',');
-    fetch(
-      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&order=market_cap_desc&sparkline=false`
-    )
+    fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}`)
       .then((res) => res.json())
       .then((data) => {
         const mapped = {};
@@ -36,12 +36,17 @@ function Watchlist() {
       .catch((err) => console.error('Market data fetch error:', err));
   }, [coins]);
 
-  const handleAdd = (coinId) => {
-    const cleaned = coinId.toLowerCase().trim();
+  const handleAdd = () => {
+    const cleaned = input.toLowerCase().trim();
     if (cleaned && !coins.includes(cleaned)) {
       setCoins([...coins, cleaned]);
     }
     setInput('');
+    setSuggestions([]);
+  };
+
+  const handleSuggestionClick = (coinId) => {
+    setInput(coinId);
     setSuggestions([]);
   };
 
@@ -65,84 +70,131 @@ function Watchlist() {
     setSuggestions(filtered);
   };
 
-  return (
-    <div style={{ flex: 1, position: 'relative' }}>
-      <h2>Watchlist</h2>
-      <input
-        type="text"
-        value={input}
-        placeholder="Search for a coin"
-        onChange={handleInputChange}
-      />
-      <button onClick={() => handleAdd(input)}>Add</button>
+  const handleRightClick = (e, coinId) => {
+    e.preventDefault();
+    setCoins(coins.filter((id) => id !== coinId));
+  };
 
-      {suggestions.length > 0 && (
-        <ul
+  const openModalForCoin = (coinId) => {
+    setSelectedCoinId(coinId);
+    setIsModalOpen(true);
+  };
+
+  return (
+    <div style={{ flex: 1, position: 'relative', padding: '1rem' }}>
+      <h2 style={{ color: 'white' }}>Watchlist</h2>
+
+      {/* Search Input + Suggestions */}
+      <div style={{ marginBottom: '1rem' }}>
+        <div style={{ position: 'relative' }}>
+          <input
+            type="text"
+            value={input}
+            placeholder="Search for a coin"
+            onChange={handleInputChange}
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              borderRadius: '8px',
+              border: '1px solid #888',
+              background: '#111',
+              color: 'white'
+            }}
+          />
+          {suggestions.length > 0 && (
+            <ul style={{
+              background: '#1a1a1a',
+              color: 'white',
+              listStyle: 'none',
+              margin: 0,
+              padding: '0.5rem 0',
+              border: '1px solid #555',
+              position: 'absolute',
+              top: '100%',
+              width: '100%',
+              maxHeight: '200px',
+              overflowY: 'auto',
+              borderRadius: '8px',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.4)',
+              zIndex: 999,
+            }}>
+              {suggestions.map((coin) => (
+                <li
+                  key={coin.id}
+                  onClick={() => handleSuggestionClick(coin.id)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #333',
+                  }}
+                >
+                  {coin.name} ({coin.symbol.toUpperCase()})
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <button
+          onClick={handleAdd}
           style={{
-            background: '#fff',
-            listStyle: 'none',
-            margin: 0,
-            padding: '0.5rem',
-            border: '1px solid #ccc',
-            position: 'absolute',
-            zIndex: 1,
-            width: '100%',
+            marginTop: '0.5rem',
+            padding: '0.4rem 0.8rem',
+            background: '#a855f7',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
           }}
         >
-          {suggestions.map((coin) => (
-            <li
-              key={coin.id}
-              onClick={() => handleAdd(coin.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              {coin.name} ({coin.symbol.toUpperCase()})
-            </li>
-          ))}
-        </ul>
-      )}
+          Add
+        </button>
+      </div>
 
+      {/* Coin List */}
       <ul style={{ padding: 0 }}>
-        {coins.map((coin) => {
-          const data = marketData[coin];
-          const change = data?.change ?? null;
-          const isPositive = change > 0;
+        {coins.map((coinId) => {
+          const data = marketData[coinId];
+          if (!data) return null;
 
           return (
             <li
-              key={coin}
+              key={coinId}
+              onClick={() => openModalForCoin(coinId)}
+              onContextMenu={(e) => handleRightClick(e, coinId)}
               style={{
                 display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: '0.5rem',
-                listStyle: 'none',
+                padding: '0.5rem 1rem',
+                background: '#222',
+                borderRadius: '8px',
                 marginBottom: '0.5rem',
+                cursor: 'pointer',
+                color: 'white'
               }}
             >
-              {data?.image && (
-                <img
-                  src={data.image}
-                  alt={coin}
-                  style={{ width: 24, height: 24, borderRadius: '50%' }}
-                />
-              )}
-              <span>
-                {coin.toUpperCase()} — ${data?.price?.toLocaleString() || 'Loading...'}
-              </span>
-              {change !== null && (
-                <span
-                  style={{
-                    fontSize: '0.8rem',
-                    color: isPositive ? 'green' : 'red',
-                  }}
-                >
-                  {isPositive ? '+' : ''}
-                  {change.toFixed(2)}%
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <img src={data.image} alt={coinId} style={{ width: 24, height: 24 }} />
+                <span>{coinId.toUpperCase()}</span>
+              </div>
+              <div>
+                <div>${data.price.toLocaleString()}</div>
+                <div style={{ fontSize: '0.8rem', color: data.change >= 0 ? 'limegreen' : 'red' }}>
+                  {data.change?.toFixed(2)}%
+                </div>
+              </div>
             </li>
           );
         })}
       </ul>
+
+      {/* Chart Modal */}
+      <CoinModal
+        isOpen={isModalOpen}
+        onRequestClose={() => setIsModalOpen(false)}
+        coinId={selectedCoinId}
+      />
     </div>
   );
 }
